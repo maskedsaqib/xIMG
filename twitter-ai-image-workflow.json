@@ -1,0 +1,423 @@
+{
+  "name": "AI Twitter Image Bot (Hourly)",
+  "nodes": [
+    {
+      "id": "schedule-trigger",
+      "name": "Every 1 Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [0, 0],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "typeVersion": 1.2
+    },
+    {
+      "id": "set-constants",
+      "name": "Set Constants",
+      "type": "n8n-nodes-base.set",
+      "position": [220, 0],
+      "parameters": {
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "id": "base-prompt",
+              "name": "basePrompt",
+              "type": "string",
+              "value": "A cute anime-style character in a cozy setting, vibrant colors, detailed background"
+            },
+            {
+              "id": "character-image",
+              "name": "characterImageUrl",
+              "type": "string",
+              "value": "https://YOUR_HOSTED_IMAGE_URL/char.png"
+            },
+            {
+              "id": "twitter-context",
+              "name": "twitterContext",
+              "type": "string",
+              "value": "You are a friendly AI art bot sharing daily creative illustrations"
+            }
+          ]
+        }
+      },
+      "typeVersion": 3.4
+    },
+    {
+      "id": "generate-seed-chain",
+      "name": "Generate Seed Prompt",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "position": [440, 0],
+      "parameters": {
+        "text": "=Based on this base concept: {{ $json.basePrompt }}\n\nGenerate a fresh, creative variation with a unique twist. Make it visually interesting and detailed. Keep it under 200 words.",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are a creative prompt generator. Generate unique, imaginative scene descriptions for AI image generation. Be specific about lighting, mood, colors, and composition. Output ONLY the prompt, no explanations."
+            }
+          ]
+        },
+        "promptType": "define"
+      },
+      "typeVersion": 1.5
+    },
+    {
+      "id": "seed-openrouter-model",
+      "name": "Kimi K2 (Seed)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "position": [440, 220],
+      "parameters": {
+        "model": "moonshotai/kimi-k2-thinking",
+        "options": {
+          "maxTokens": 500
+        }
+      },
+      "credentials": {
+        "openRouterApi": {
+          "id": "openrouter-cred",
+          "name": "OpenRouter"
+        }
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "merge-prompt",
+      "name": "Merge Prompts",
+      "type": "n8n-nodes-base.set",
+      "position": [660, 0],
+      "parameters": {
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "id": "seed-prompt",
+              "name": "seedPrompt",
+              "type": "string",
+              "value": "={{ $json.text }}"
+            },
+            {
+              "id": "merged-prompt",
+              "name": "mergedPrompt",
+              "type": "string",
+              "value": "={{ $('Set Constants').item.json.basePrompt }}. Creative variation: {{ $json.text }}"
+            },
+            {
+              "id": "char-image",
+              "name": "characterImageUrl",
+              "type": "string",
+              "value": "={{ $('Set Constants').item.json.characterImageUrl }}"
+            },
+            {
+              "id": "tw-context",
+              "name": "twitterContext",
+              "type": "string",
+              "value": "={{ $('Set Constants').item.json.twitterContext }}"
+            }
+          ]
+        }
+      },
+      "typeVersion": 3.4
+    },
+    {
+      "id": "generate-tweet-chain",
+      "name": "Generate Tweet Text",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "position": [880, 0],
+      "parameters": {
+        "text": "=Write a tweet for this artwork description: {{ $json.mergedPrompt }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "={{ $json.twitterContext }}. Write engaging, fun tweets to accompany AI-generated artwork. Be creative, use appropriate emojis, and keep tweets under 250 characters. Output ONLY the tweet text."
+            }
+          ]
+        },
+        "promptType": "define"
+      },
+      "typeVersion": 1.5
+    },
+    {
+      "id": "tweet-openrouter-model",
+      "name": "Kimi K2 (Tweet)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "position": [880, 220],
+      "parameters": {
+        "model": "moonshotai/kimi-k2-thinking",
+        "options": {
+          "maxTokens": 150
+        }
+      },
+      "credentials": {
+        "openRouterApi": {
+          "id": "openrouter-cred",
+          "name": "OpenRouter"
+        }
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "prepare-image",
+      "name": "Prepare Image Request",
+      "type": "n8n-nodes-base.set",
+      "position": [1100, 0],
+      "parameters": {
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "id": "tweet-text",
+              "name": "tweetText",
+              "type": "string",
+              "value": "={{ $json.text }}"
+            },
+            {
+              "id": "merged",
+              "name": "mergedPrompt",
+              "type": "string",
+              "value": "={{ $('Merge Prompts').item.json.mergedPrompt }}"
+            },
+            {
+              "id": "char-img",
+              "name": "characterImageUrl",
+              "type": "string",
+              "value": "={{ $('Merge Prompts').item.json.characterImageUrl }}"
+            }
+          ]
+        }
+      },
+      "typeVersion": 3.4
+    },
+    {
+      "id": "generate-image-http",
+      "name": "Generate Image (Gemini)",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1320, 0],
+      "parameters": {
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "method": "POST",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "HTTP-Referer",
+              "value": "https://twitter-bot.app"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"google/gemini-2.0-flash-exp:free\",\n  \"modalities\": [\"image\", \"text\"],\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"Generate an image based on this description: {{ $json.mergedPrompt }}. Use the provided reference image as character style guide.\"\n        },\n        {\n          \"type\": \"image_url\",\n          \"image_url\": {\n            \"url\": \"{{ $json.characterImageUrl }}\"\n          }\n        }\n      ]\n    }\n  ],\n  \"max_tokens\": 4096\n}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "openrouter-http-auth",
+          "name": "OpenRouter HTTP Auth"
+        }
+      },
+      "typeVersion": 4.2
+    },
+    {
+      "id": "extract-convert-image",
+      "name": "Extract & Convert Image",
+      "type": "n8n-nodes-base.code",
+      "position": [1540, 0],
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst tweetText = $('Prepare Image Request').first().json.tweetText;\n\nlet imageData = null;\n\n// OpenRouter image generation returns images in message.images array\nif (response.choices && response.choices[0] && response.choices[0].message) {\n  const message = response.choices[0].message;\n  \n  // Check for images array (OpenRouter image generation format)\n  if (message.images && message.images.length > 0) {\n    const imageUrl = message.images[0].image_url?.url || message.images[0].imageUrl?.url;\n    if (imageUrl && imageUrl.startsWith('data:image')) {\n      const match = imageUrl.match(/base64,(.+)/);\n      if (match) imageData = match[1];\n    }\n  }\n  \n  // Fallback: check content array for image parts\n  if (!imageData && Array.isArray(message.content)) {\n    for (const part of message.content) {\n      if (part.type === 'image_url' && part.image_url?.url) {\n        const url = part.image_url.url;\n        if (url.startsWith('data:image')) {\n          const match = url.match(/base64,(.+)/);\n          if (match) imageData = match[1];\n        }\n      }\n    }\n  }\n  \n  // Fallback: check if content is string with base64\n  if (!imageData && typeof message.content === 'string' && message.content.includes('data:image')) {\n    const match = message.content.match(/data:image\\/[^;]+;base64,([A-Za-z0-9+/=]+)/);\n    if (match) imageData = match[1];\n  }\n}\n\nif (!imageData) {\n  throw new Error('No image data found in response. Response structure: ' + JSON.stringify(Object.keys(response.choices?.[0]?.message || {})));\n}\n\nconst binaryData = Buffer.from(imageData, 'base64');\n\nreturn {\n  json: {\n    tweetText: tweetText\n  },\n  binary: {\n    data: {\n      data: binaryData.toString('base64'),\n      mimeType: 'image/png',\n      fileName: 'generated-image.png'\n    }\n  }\n};"
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "twitter-post",
+      "name": "Twitter - Post Tweet",
+      "type": "n8n-nodes-base.twitter",
+      "position": [1760, 0],
+      "parameters": {
+        "text": "={{ $json.tweetText }}",
+        "additionalFields": {
+          "attachments": {
+            "media": [
+              {
+                "binaryData": true,
+                "binaryProperty": "data"
+              }
+            ]
+          }
+        }
+      },
+      "credentials": {
+        "twitterOAuth2Api": {
+          "id": "twitter-oauth",
+          "name": "Twitter OAuth2"
+        }
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "position": [0, 300],
+      "parameters": {},
+      "typeVersion": 1
+    },
+    {
+      "id": "log-error",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.set",
+      "position": [220, 300],
+      "parameters": {
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "id": "error-msg",
+              "name": "error",
+              "type": "string",
+              "value": "=Workflow failed: {{ $json.error.message }} at {{ $now.toISO() }}"
+            }
+          ]
+        }
+      },
+      "typeVersion": 3.4
+    }
+  ],
+  "connections": {
+    "Every 1 Hour": {
+      "main": [
+        [
+          {
+            "node": "Set Constants",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Constants": {
+      "main": [
+        [
+          {
+            "node": "Generate Seed Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Seed Prompt": {
+      "main": [
+        [
+          {
+            "node": "Merge Prompts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kimi K2 (Seed)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate Seed Prompt",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Prompts": {
+      "main": [
+        [
+          {
+            "node": "Generate Tweet Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Tweet Text": {
+      "main": [
+        [
+          {
+            "node": "Prepare Image Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kimi K2 (Tweet)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate Tweet Text",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Image Request": {
+      "main": [
+        [
+          {
+            "node": "Generate Image (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Image (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Extract & Convert Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract & Convert Image": {
+      "main": [
+        [
+          {
+            "node": "Twitter - Post Tweet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1
+}
