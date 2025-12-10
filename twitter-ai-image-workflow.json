@@ -31,19 +31,19 @@
               "id": "base-prompt",
               "name": "basePrompt",
               "type": "string",
-              "value": "A cute anime-style character in a cozy setting, vibrant colors, detailed background"
+              "value": "Wobbly Woods art style - colorful, swirly, whimsical forest setting. Two characters: Dot (round adventurer, curious, bold, always rolling into trouble) and Pippin (gentle supporter/healer, worried but loyal, fixes things, reads nature's signs). The style features twisty magical trees, glowing flowers, swirling leaves, soft pastel colors with vibrant accents. Sticker-like character designs with expressive faces and small speech bubbles."
             },
             {
               "id": "character-image",
               "name": "characterImageUrl",
               "type": "string",
-              "value": "https://YOUR_HOSTED_IMAGE_URL/char.png"
+              "value": "https://raw.githubusercontent.com/maskedsaqib/xIMG/main/char.png"
             },
             {
               "id": "twitter-context",
               "name": "twitterContext",
               "type": "string",
-              "value": "You are a friendly AI art bot sharing daily creative illustrations"
+              "value": "You are the storyteller for Dot & Pippin's Wobbly Woods adventures. Write fun, whimsical tweets with character dialogue. Dot is bold and excitable, Pippin is gentle and cautious. Use playful language matching the sticker art vibe."
             }
           ]
         }
@@ -74,7 +74,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
       "position": [440, 220],
       "parameters": {
-        "model": "moonshotai/kimi-k2-thinking",
+        "model": "moonshotai/kimi-k2-0905",
         "options": {
           "maxTokens": 500
         }
@@ -149,7 +149,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
       "position": [880, 220],
       "parameters": {
-        "model": "moonshotai/kimi-k2-thinking",
+        "model": "moonshotai/kimi-k2-0905",
         "options": {
           "maxTokens": 150
         }
@@ -215,7 +215,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"google/gemini-2.0-flash-exp:free\",\n  \"modalities\": [\"image\", \"text\"],\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"Generate an image based on this description: {{ $json.mergedPrompt }}. Use the provided reference image as character style guide.\"\n        },\n        {\n          \"type\": \"image_url\",\n          \"image_url\": {\n            \"url\": \"{{ $json.characterImageUrl }}\"\n          }\n        }\n      ]\n    }\n  ],\n  \"max_tokens\": 4096\n}",
+        "jsonBody": "={\n  \"model\": \"google/gemini-2.5-flash-image\",\n  \"modalities\": [\"image\", \"text\"],\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"Generate an image based on this description: {{ $json.mergedPrompt }}. IMPORTANT: Use ONLY the exact characters from the provided reference image. Do not create new characters - use Dot and Pippin exactly as they appear in the reference image. Maintain their exact sticker design, colors, and proportions.\"\n        },\n        {\n          \"type\": \"image_url\",\n          \"image_url\": {\n            \"url\": \"{{ $json.characterImageUrl }}\"\n          }\n        }\n      ]\n    }\n  ],\n  \"max_tokens\": 4096\n}",
         "options": {}
       },
       "credentials": {
