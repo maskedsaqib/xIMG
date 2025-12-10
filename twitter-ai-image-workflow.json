@@ -195,10 +195,20 @@
       "typeVersion": 3.4
     },
     {
+      "id": "build-image-request",
+      "name": "Build Image Request",
+      "type": "n8n-nodes-base.code",
+      "position": [1320, 0],
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\nconst requestBody = {\n  model: 'google/gemini-2.5-flash-image',\n  modalities: ['image', 'text'],\n  messages: [\n    {\n      role: 'user',\n      content: [\n        {\n          type: 'text',\n          text: `Generate an image based on this description: ${input.mergedPrompt}. IMPORTANT: Use ONLY the exact characters from the provided reference image. Do not create new characters - use Dot and Pippin exactly as they appear in the reference image. Maintain their exact sticker design, colors, and proportions.`\n        },\n        {\n          type: 'image_url',\n          image_url: {\n            url: input.characterImageUrl\n          }\n        }\n      ]\n    }\n  ],\n  max_tokens: 4096\n};\n\nreturn {\n  json: {\n    tweetText: input.tweetText,\n    requestBody: requestBody\n  }\n};"
+      },
+      "typeVersion": 2
+    },
+    {
       "id": "generate-image-http",
       "name": "Generate Image (Gemini)",
       "type": "n8n-nodes-base.httpRequest",
-      "position": [1320, 0],
+      "position": [1540, 0],
       "parameters": {
         "url": "https://openrouter.ai/api/v1/chat/completions",
         "method": "POST",
@@ -215,7 +225,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"google/gemini-2.5-flash-image\",\n  \"modalities\": [\"image\", \"text\"],\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"Generate an image based on this description: {{ $json.mergedPrompt }}. IMPORTANT: Use ONLY the exact characters from the provided reference image. Do not create new characters - use Dot and Pippin exactly as they appear in the reference image. Maintain their exact sticker design, colors, and proportions.\"\n        },\n        {\n          \"type\": \"image_url\",\n          \"image_url\": {\n            \"url\": \"{{ $json.characterImageUrl }}\"\n          }\n        }\n      ]\n    }\n  ],\n  \"max_tokens\": 4096\n}",
+        "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
         "options": {}
       },
       "credentials": {
@@ -230,37 +240,91 @@
       "id": "extract-convert-image",
       "name": "Extract & Convert Image",
       "type": "n8n-nodes-base.code",
-      "position": [1540, 0],
+      "position": [1760, 0],
       "parameters": {
-        "jsCode": "const response = $input.first().json;\nconst tweetText = $('Prepare Image Request').first().json.tweetText;\n\nlet imageData = null;\n\n// OpenRouter image generation returns images in message.images array\nif (response.choices && response.choices[0] && response.choices[0].message) {\n  const message = response.choices[0].message;\n  \n  // Check for images array (OpenRouter image generation format)\n  if (message.images && message.images.length > 0) {\n    const imageUrl = message.images[0].image_url?.url || message.images[0].imageUrl?.url;\n    if (imageUrl && imageUrl.startsWith('data:image')) {\n      const match = imageUrl.match(/base64,(.+)/);\n      if (match) imageData = match[1];\n    }\n  }\n  \n  // Fallback: check content array for image parts\n  if (!imageData && Array.isArray(message.content)) {\n    for (const part of message.content) {\n      if (part.type === 'image_url' && part.image_url?.url) {\n        const url = part.image_url.url;\n        if (url.startsWith('data:image')) {\n          const match = url.match(/base64,(.+)/);\n          if (match) imageData = match[1];\n        }\n      }\n    }\n  }\n  \n  // Fallback: check if content is string with base64\n  if (!imageData && typeof message.content === 'string' && message.content.includes('data:image')) {\n    const match = message.content.match(/data:image\\/[^;]+;base64,([A-Za-z0-9+/=]+)/);\n    if (match) imageData = match[1];\n  }\n}\n\nif (!imageData) {\n  throw new Error('No image data found in response. Response structure: ' + JSON.stringify(Object.keys(response.choices?.[0]?.message || {})));\n}\n\nconst binaryData = Buffer.from(imageData, 'base64');\n\nreturn {\n  json: {\n    tweetText: tweetText\n  },\n  binary: {\n    data: {\n      data: binaryData.toString('base64'),\n      mimeType: 'image/png',\n      fileName: 'generated-image.png'\n    }\n  }\n};"
+        "jsCode": "const response = $input.first().json;\nconst tweetText = $('Build Image Request').first().json.tweetText;\n\nlet imageData = null;\n\n// OpenRouter image generation returns images in message.images array\nif (response.choices && response.choices[0] && response.choices[0].message) {\n  const message = response.choices[0].message;\n  \n  // Check for images array (OpenRouter image generation format)\n  if (message.images && message.images.length > 0) {\n    const imageUrl = message.images[0].image_url?.url || message.images[0].imageUrl?.url;\n    if (imageUrl && imageUrl.startsWith('data:image')) {\n      const match = imageUrl.match(/base64,(.+)/);\n      if (match) imageData = match[1];\n    }\n  }\n  \n  // Fallback: check content array for image parts\n  if (!imageData && Array.isArray(message.content)) {\n    for (const part of message.content) {\n      if (part.type === 'image_url' && part.image_url?.url) {\n        const url = part.image_url.url;\n        if (url.startsWith('data:image')) {\n          const match = url.match(/base64,(.+)/);\n          if (match) imageData = match[1];\n        }\n      }\n    }\n  }\n  \n  // Fallback: check if content is string with base64\n  if (!imageData && typeof message.content === 'string' && message.content.includes('data:image')) {\n    const match = message.content.match(/data:image\\/[^;]+;base64,([A-Za-z0-9+/=]+)/);\n    if (match) imageData = match[1];\n  }\n}\n\nif (!imageData) {\n  throw new Error('No image data found in response. Response structure: ' + JSON.stringify(Object.keys(response.choices?.[0]?.message || {})));\n}\n\nconst binaryData = Buffer.from(imageData, 'base64');\n\nreturn {\n  json: {\n    tweetText: tweetText\n  },\n  binary: {\n    data: {\n      data: binaryData.toString('base64'),\n      mimeType: 'image/png',\n      fileName: 'generated-image.png'\n    }\n  }\n};"
       },
       "typeVersion": 2
     },
     {
-      "id": "twitter-post",
-      "name": "Twitter - Post Tweet",
-      "type": "n8n-nodes-base.twitter",
-      "position": [1760, 0],
+      "id": "upload-media",
+      "name": "Upload Media to Twitter",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1980, 0],
       "parameters": {
-        "text": "={{ $json.tweetText }}",
-        "additionalFields": {
-          "attachments": {
-            "media": [
-              {
-                "binaryData": true,
-                "binaryProperty": "data"
-              }
-            ]
-          }
-        }
+        "url": "https://upload.twitter.com/1.1/media/upload.json",
+        "method": "POST",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "twitterOAuth1Api",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "media",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
       },
       "credentials": {
-        "twitterOAuth2Api": {
-          "id": "twitter-oauth",
-          "name": "Twitter OAuth2"
+        "twitterOAuth1Api": {
+          "id": "twitter-oauth1",
+          "name": "Twitter OAuth1"
         }
       },
-      "typeVersion": 2
+      "typeVersion": 4.2
+    },
+    {
+      "id": "prepare-tweet-data",
+      "name": "Prepare Tweet Data",
+      "type": "n8n-nodes-base.set",
+      "position": [2200, 0],
+      "parameters": {
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "id": "tweet-text-final",
+              "name": "tweetText",
+              "type": "string",
+              "value": "={{ $('Extract & Convert Image').item.json.tweetText }}"
+            },
+            {
+              "id": "media-id",
+              "name": "mediaId",
+              "type": "string",
+              "value": "={{ $json.media_id_string }}"
+            }
+          ]
+        }
+      },
+      "typeVersion": 3.4
+    },
+    {
+      "id": "post-tweet",
+      "name": "Post Tweet with Media",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [2420, 0],
+      "parameters": {
+        "url": "https://api.twitter.com/2/tweets",
+        "method": "POST",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "twitterOAuth1Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: $json.tweetText, media: { media_ids: [$json.mediaId] } }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "twitterOAuth1Api": {
+          "id": "twitter-oauth1",
+          "name": "Twitter OAuth1"
+        }
+      },
+      "typeVersion": 4.2
     },
     {
       "id": "error-trigger",
@@ -373,6 +437,17 @@
       "main": [
         [
           {
+            "node": "Build Image Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Image Request": {
+      "main": [
+        [
+          {
             "node": "Generate Image (Gemini)",
             "type": "main",
             "index": 0
@@ -395,7 +470,29 @@
       "main": [
         [
           {
-            "node": "Twitter - Post Tweet",
+            "node": "Upload Media to Twitter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Media to Twitter": {
+      "main": [
+        [
+          {
+            "node": "Prepare Tweet Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Tweet Data": {
+      "main": [
+        [
+          {
+            "node": "Post Tweet with Media",
             "type": "main",
             "index": 0
           }
